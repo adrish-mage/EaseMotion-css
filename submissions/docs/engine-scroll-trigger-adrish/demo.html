@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EaseMotion Scroll-Trigger Plugin Demo</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/SAPTARSHI-coder/EaseMotion-css@main/easemotion.min.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="ease-scroll-demo-wrapper">
+    <p class="ease-scroll-demo-intro">
+      Scroll down — each box below uses <code>em-scroll=""</code> instead of
+      <code>em=""</code>. Nothing plays until it crosses its threshold.
+      Open DevTools → Console to see the real attribute the plugin writes.
+    </p>
+
+    <div class="spacer"></div>
+
+    <div class="demo-box" em-scroll="fade-in 500ms ease-out threshold-0.5 once">
+      once · fade-in
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="demo-box" em-scroll="slide-in-from-bottom 600ms ease-out threshold-0.3 once">
+      once · slide-in-from-bottom
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="demo-box" em-scroll="zoom-in 400ms threshold-0.5 repeat">
+      repeat · zoom-in (re-fires every time it re-enters view)
+    </div>
+
+    <div class="spacer"></div>
+  </div>
+
+  <script>
+    /**
+     * Scroll-Trigger Plugin (proposed: easemotion/plugins/scroll-trigger.js)
+     * ------------------------------------------------------------------
+     * This demo is fully self-contained — no server, no CDN JS import, no
+     * external framework — per the submission rules. It uses only native
+     * IntersectionObserver, which needs no import at all.
+     *
+     * What IS real here: parseScrollToken(), the threshold/once/repeat
+     * grammar, and the IntersectionObserver wiring — this is the exact
+     * logic proposed for the real plugin file (see README's Engine
+     * Integration Plan).
+     *
+     * What's MOCKED here: the "apply the animation" step. In the real,
+     * merged version, setting el.setAttribute('em', emValue) is ALL this
+     * plugin needs to do — runtime.js already runs a MutationObserver with
+     * attributeFilter: ['em'] and does the actual compile + class-apply
+     * itself. That live runtime can't be loaded here without a server
+     * (ES module imports are blocked under file://), so MockScrollRuntime
+     * below stands in for "whatever runtime.js would do next," purely so
+     * you can see the box move without needing a dev server.
+     */
+    function parseScrollToken(raw) {
+      const tokens = raw.trim().split(/\s+/);
+      let threshold = 0.25;
+      let mode = 'once';
+      const emTokens = [];
+
+      for (const t of tokens) {
+        const thMatch = t.match(/^threshold-(0(?:\.\d+)?|1(?:\.0+)?)$/);
+        if (thMatch) { threshold = parseFloat(thMatch[1]); continue; }
+        if (t === 'once' || t === 'repeat') { mode = t; continue; }
+        emTokens.push(t);
+      }
+      return { emValue: emTokens.join(' '), threshold, mode };
+    }
+
+    class MockScrollRuntime {
+      apply(el, emValue) {
+        el.setAttribute('em', emValue);
+        el.classList.add('ease-scroll-revealed');
+        console.log('[scroll-trigger] em set ->', emValue);
+      }
+      revert(el) {
+        el.removeAttribute('em');
+        el.classList.remove('ease-scroll-revealed');
+        console.log('[scroll-trigger] em cleared (repeat mode, left viewport)');
+      }
+    }
+
+    function initScrollTrigger(root = document) {
+      const runtime = new MockScrollRuntime();
+      const elements = root.querySelectorAll('[em-scroll]');
+
+      elements.forEach((el) => {
+        const { emValue, threshold, mode } = parseScrollToken(el.getAttribute('em-scroll'));
+        el.classList.add('ease-scroll-pending');
+
+        const observer = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              el.classList.remove('ease-scroll-pending');
+              runtime.apply(el, emValue);
+              if (mode === 'once') observer.disconnect();
+            } else if (mode === 'repeat') {
+              el.classList.add('ease-scroll-pending');
+              runtime.revert(el);
+            }
+          }
+        }, { threshold });
+
+        observer.observe(el);
+      });
+    }
+
+    initScrollTrigger();
+  </script>
+</body>
+</html>
